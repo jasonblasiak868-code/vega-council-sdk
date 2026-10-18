@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vega-council-sdk"
+version = "0.1.0"
+description = "Council and builder: anonymous equal-brains deliberation, design-first building with human taste decisions, independent verification, and a use-gated reference library."
+requires-python = ">=3.10"
+dependencies = ["vega-custody-sdk", "vega-harness-sdk"]
+license = {file = "LICENSE"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
