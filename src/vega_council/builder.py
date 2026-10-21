@@ -11,10 +11,14 @@
     verify(phase_id, brain, checklist)        brain must differ from the builder of that phase AND be of a different family. checklist: [{"id", "expected", "coded", "required", "passed"}]:
                                    a required item must be expected (written before the build), coded and passed. Phase DONE only then.
     status()                       per phase state and COMPLETE only when every phase is DONE.
-Everything is recorded as hashes and ids on the custody chain."""
+Everything is recorded as hashes and ids on the custody chain. RECORD FIRST: each step writes its record before the state changes, so a chain write that fails leaves the
+design, the phases and the decisions exactly as they were. A design is hashed as plain JSON data (an object inside it is refused, never hashed by its memory address).
+The builder's operations run one at a time."""
+import functools
 import hashlib
 import json
 import re
+import threading
 
 from vega_custody.dag.dag import RecordRefused
 
@@ -28,12 +32,24 @@ class BuilderRefused(ValueError):
 
 
 def _h(obj):
-    return hashlib.sha256(json.dumps(obj, sort_keys=True, default=repr).encode()).hexdigest()
+    try:
+        return hashlib.sha256(json.dumps(obj, sort_keys=True, allow_nan=False).encode()).hexdigest()
+    except (TypeError, ValueError, RecursionError) as exc:
+        raise BuilderRefused("a design and a decision are plain data (text, numbers, lists, dicts): %s" % exc) from exc
+
+
+def _serial(fn):
+    @functools.wraps(fn)
+    def inner(self, *a, **k):
+        with self._lock:
+            return fn(self, *a, **k)
+    return inner
 
 
 class Builder:
     def __init__(self, dag):
         self.dag = dag
+        self._lock = threading.RLock()
         self.design_hash = None
         self.approved = False
         self.phases = {}
@@ -45,13 +61,16 @@ class Builder:
         except RecordRefused as exc:
             raise BuilderRefused("could not record: %s" % exc)
 
+    @_serial
     def propose_design(self, design):
         if not isinstance(design, dict) or not design:
             raise BuilderRefused("a design is a non-empty dict")
-        self.design_hash, self.approved = _h(design), False
-        self._rec("BUILD_DESIGN", {"design_sha256": self.design_hash})
+        h = _h(design)
+        self._rec("BUILD_DESIGN", {"design_sha256": h})
+        self.design_hash, self.approved = h, False
         return self.design_hash
 
+    @_serial
     def approve(self, design_hash, human_ok):
         if design_hash != self.design_hash or self.design_hash is None:
             raise BuilderRefused("that is not the design on the table")
@@ -61,9 +80,10 @@ class Builder:
             ok = False
         if not ok:
             raise BuilderRefused("no human approval for this design")
-        self.approved = True
         self._rec("BUILD_APPROVED", {"design_sha256": design_hash})
+        self.approved = True
 
+    @_serial
     def plan(self, phases):
         if not self.approved:
             raise BuilderRefused("plan after the design is approved")
@@ -94,11 +114,12 @@ class Builder:
             order.append(n)
         for n in seen:
             visit(n)
+        self._rec("BUILD_PLAN", {"design_sha256": self.design_hash, "order": order})
         self.order = order
         self.phases = {n: {"deps": seen[n], "state": "PLANNED", "builder": None, "family": None, "design_sha256": self.design_hash, "decisions": {}, "pending": []} for n in order}
-        self._rec("BUILD_PLAN", {"design_sha256": self.design_hash, "order": order})
         return list(order)
 
+    @_serial
     def build(self, phase_id, brain_id, family, fn):
         ph = self.phases.get(phase_id)
         if ph is None:
@@ -127,15 +148,17 @@ class Builder:
         tags = out.get("tags", [])
         taste = [str(t).casefold() for t in tags if isinstance(t, str) and str(t).casefold() in TASTE_WORDS] if isinstance(tags, (list, tuple)) else []
         pending = [d for d in decisions] + [{"key": "taste:%s" % t, "options": []} for t in taste]
-        ph.update(builder=brain_id, family=family, artifact_sha256=hashlib.sha256(out["artifact"].encode()).hexdigest())
+        artifact_sha = hashlib.sha256(out["artifact"].encode()).hexdigest()
         if pending:
-            ph["state"], ph["pending"] = "DECISION", [d["key"] for d in pending]
-            self._rec("BUILD_PAUSED", {"phase": phase_id, "brain": brain_id, "decisions": ph["pending"], "artifact_sha256": ph["artifact_sha256"]})
+            keys = [d["key"] for d in pending]
+            self._rec("BUILD_PAUSED", {"phase": phase_id, "brain": brain_id, "decisions": keys, "artifact_sha256": artifact_sha})
+            ph.update(builder=brain_id, family=family, artifact_sha256=artifact_sha, state="DECISION", pending=keys)
             return {"status": "DECISION", "decisions": [{"key": d["key"], "options": list(d["options"])} for d in pending]}
-        ph["state"] = "BUILT"
-        self._rec("BUILD_STEP", {"phase": phase_id, "brain": brain_id, "design_sha256": self.design_hash, "artifact_sha256": ph["artifact_sha256"]})
+        self._rec("BUILD_STEP", {"phase": phase_id, "brain": brain_id, "design_sha256": self.design_hash, "artifact_sha256": artifact_sha})
+        ph.update(builder=brain_id, family=family, artifact_sha256=artifact_sha, state="BUILT")
         return {"status": "BUILT"}
 
+    @_serial
     def decide(self, phase_id, key, choice, human_ok):
         ph = self.phases.get(phase_id)
         if ph is None or ph["state"] != "DECISION" or key not in ph["pending"]:
@@ -149,13 +172,14 @@ class Builder:
             ok = False
         if not ok:
             raise BuilderRefused("the choice was not made by a human")
+        self._rec("BUILD_DECIDED", {"phase": phase_id, "decision_key": key, "choice_sha256": hashlib.sha256(choice.encode()).hexdigest()})
         ph["decisions"][key] = choice
         ph["pending"].remove(key)
-        self._rec("BUILD_DECIDED", {"phase": phase_id, "decision_key": key, "choice_sha256": hashlib.sha256(choice.encode()).hexdigest()})
         if not ph["pending"]:
             ph["state"] = "BUILT"
         return ph["state"]
 
+    @_serial
     def verify(self, phase_id, brain_id, family, checklist):
         ph = self.phases.get(phase_id)
         if ph is None or ph["state"] != "BUILT":
@@ -175,8 +199,9 @@ class Builder:
                 bad.append(it["id"])
         if not any(it["required"] for it in checklist):
             raise BuilderRefused("a checklist with no required item proves nothing")
-        ph["state"] = "DONE" if not bad else "BUILT_REJECTED"
-        self._rec("BUILD_VERIFY", {"phase": phase_id, "verifier": brain_id, "state": ph["state"], "failed": sorted(bad)})
+        new_state = "DONE" if not bad else "BUILT_REJECTED"
+        self._rec("BUILD_VERIFY", {"phase": phase_id, "verifier": brain_id, "state": new_state, "failed": sorted(bad)})
+        ph["state"] = new_state
         return {"state": ph["state"], "failed": sorted(bad)}
 
     def status(self):

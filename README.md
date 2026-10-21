@@ -15,7 +15,7 @@
 | Layer | 14 of 16, deliberate |
 | Depends on | vega-custody-sdk, vega-harness-sdk |
 | Python | 3.10 or newer, pure Python, no network code |
-| Tests | 54 tests in 4 files, all passing (STATUS.md) |
+| Tests | 64 tests in 5 files, all passing (STATUS.md) |
 | Status | Reference implementation, work in progress |
 
 **Contents:** [Why](#why-this-exists) · [Capabilities](#capabilities) · [Flow](#end-to-end-flow) · [Controls](#controls) · [Cannot do](#what-it-cannot-do) · [Platforms](#platform-support) · [Install](#install-standalone-and-unified) · [Diagnostics](#diagnostic-control) · [Fail closed](#fail-closed-and-custom-constraints) · [Family](#where-it-sits-in-the-family) · [Tests](#tests)
@@ -125,7 +125,7 @@ Layer 14, deliberate. It depends on layer 0 (custody) and layer 6 (harness). One
 
 ## Tests
 
-54 tests in 4 files, all passing (STATUS.md). Put this repo's `src` and the `src` of both dependencies on `PYTHONPATH`, then run each file in `tests/`, for example `python tests/test_council.py`.
+64 tests in 5 files, all passing (STATUS.md). Put this repo's `src` and the `src` of both dependencies on `PYTHONPATH`, then run each file in `tests/`, for example `python tests/test_council.py`.
 
 ## Status and honesty
 
