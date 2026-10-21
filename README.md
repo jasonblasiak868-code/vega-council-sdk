@@ -2,6 +2,15 @@
 
 ![vega-council-sdk](assets/tile.svg)
 
+<!-- vega-install-order -->
+> **Build order: 5/5. This kit needs 4 other Vega kits installed first.** Install them in this order, then this one:
+> 1/5 `vega-custody-sdk`  
+> 2/5 `vega-governance-jacket-sdk`  
+> 3/5 `vega-librarian-sdk`  
+> 4/5 `vega-harness-sdk`  
+> 5/5 `vega-council-sdk` (this kit)
+> Install each with `pip install --no-deps git+https://github.com/jasonblasiak868-code/<name>` in the order shown, plus `pip install cryptography`. Full steps: [INTEGRATION_GUIDE](https://github.com/jasonblasiak868-code/vega-umbrella-sdk/blob/main/INTEGRATION_GUIDE.md).
+
 **Deliberation and building that a person can audit.** Several AI "brains" answer the same question, review each other anonymously, and the outcome always carries its dissent. A build pipeline then turns an approved design into verified work, where a human holds every taste decision and whoever built a phase can never be the one to verify it. This kit owns one concern in the Vega family: **structured multi-brain deliberation and design-first building**.
 
 > **Licensing.** Source-available, not open source. Free for personal use; free for registered small businesses (under US$1M revenue and valuation); everyone else needs a commercial license (see LICENSE; for a commercial license write to jasonblasiak.ai.mail@gmail.com). Patent pending. Draft licence text, not yet reviewed by an attorney.
