@@ -15,6 +15,15 @@ from vega_custody import safepaths as sp
 from vega_custody.dag.dag import RecordRefused, contains_credential
 from vega_harness import use_gate
 
+_PEM = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----.*?(?:-----END [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?-----|\Z)", re.S)
+
+
+def scrub_excerpt(text: str) -> str:
+    """A private-key block is replaced WHOLE (header, body lines and footer; an unterminated one to the end of the text), because its body lines look like harmless base64 on
+    their own. Then any other credential-shaped line is replaced."""
+    text = _PEM.sub("[REDACTED: private key block]", text)
+    return "\n".join("[REDACTED: credential-shaped line]" if contains_credential(l) else l for l in text.split("\n"))
+
 READ_CAP = 8000
 LIST_CAP = 2000
 FILE_CAP = 2 * 1024 * 1024
@@ -83,7 +92,7 @@ class ReferenceLibrary:
         except sp.PathRefused as exc:
             raise LibraryRefused(str(exc))
         text = _CTRL.sub(" ", raw.decode("utf-8", "replace"))
-        excerpt = "\n".join("[REDACTED: credential-shaped line]" if contains_credential(l) else l for l in text.split("\n"))[:READ_CAP]
+        excerpt = scrub_excerpt(text)[:READ_CAP]
         self._rec("LIB_READ", {"repo": repo, "path_sha256": hashlib.sha256(relpath.encode()).hexdigest(), "bytes": len(raw), "class": use_gate.klass(repo, self.matrix), "tainted": True})
         return {"excerpt": excerpt, "truncated": len(text) > READ_CAP, "tainted": True, "strictest_class": gate["strictest_class"], "condition": gate["condition"],
                 "provenance": {"library_sources": [repo], "tainted": True}, "use_card": use_gate.use_card(repo, self.matrix)}
