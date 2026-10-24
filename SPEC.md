@@ -34,7 +34,7 @@ Specified: how several brains deliberate on one prompt, how a design becomes ver
 - A council is 2 to 32 `Brain` objects with unique ids.
 - Round 1: every enabled brain answers. A paid brain is asked only if `paid_ok(brain_id, prompt_sha256)` returns exactly `True`; otherwise it is skipped and a `COUNCIL_SKIP` record is written.
 - Round 2: each answering brain sees the other answers under labels A, B, C and so on, shuffled by a seed taken from the prompt hash, and returns stances. Stances on its own answer, unknown targets and unknown stance words are dropped.
-- Votes count per family. The bar is a majority of families, or one if there is only one family.
+- Votes count per family. A family's vote on an answer written by its own family is ignored. The bar for an answer is a majority of the other families; with no other family, that answer cannot clear the bar. The result record carries `need_by_brain` (the bar for each answer) in place of the old single `need`.
 - Outcomes: several answers cleared with no challenge give CONSENSUS_SEVERAL; one clean answer gives CONSENSUS; a cleared but challenged answer gives CONSENSUS_WITH_DISSENT with the challenge notes hashed; nothing cleared gives SPLIT; fewer than two answers gives INSUFFICIENT.
 - A brain that raises or answers in the wrong shape abstains.
 

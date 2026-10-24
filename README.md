@@ -71,7 +71,7 @@ flowchart LR
 
 1. **Ask.** `Council.deliberate(prompt)` sends the same prompt to every enabled brain. No roles, no ranks.
 2. **Review.** Each brain sees the others' answers under shuffled anonymous labels and returns a stance on each: VALIDATE, CHALLENGE or EXTEND.
-3. **Count.** Votes are counted per family. The bar is a majority of families.
+3. **Count.** Votes are counted per family, and a family's vote never counts on an answer written by its own family. The bar for an answer is a majority of the OTHER families. A council made of one family cannot reach consensus.
 4. **Report.** The result names the outcome, the scores, and any dissent. The chain records hashes and counts, never the answers.
 5. **Design.** `Builder.propose_design` hashes a design. `approve` needs a human check that returns exactly `True` for that hash.
 6. **Build and verify.** Phases run in dependency order. Taste decisions pause the phase. `verify` needs a different brain of a different family.

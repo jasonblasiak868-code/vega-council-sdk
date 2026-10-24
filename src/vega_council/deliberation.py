@@ -90,6 +90,7 @@ class Council:
         votes = {l: {"VALIDATE": set(), "CHALLENGE": set(), "EXTEND": set()} for l in by_label}
         notes = {l: [] for l in by_label}
         fam = {b.id: b.family for b in pool}
+        author_of = {l: bid for bid, l in label_of.items()}          # label -> the brain that wrote it (kept private; only the family is used)
         for b in pool:
             if b.id not in round1:
                 continue
@@ -104,13 +105,18 @@ class Council:
             for s in env:
                 if not isinstance(s, dict) or s.get("stance") not in STANCES or s.get("target") not in by_label or s.get("target") == own:
                     continue
+                if fam[b.id] == fam[author_of[s["target"]]]:
+                    continue                                       # a family's vote on its OWN family's answer does not count: same-family brains are biased toward each other
                 votes[s["target"]][s["stance"]].add(fam[b.id])
                 if s["stance"] == "CHALLENGE" and isinstance(s.get("note"), str):
                     notes[s["target"]].append(_h(s["note"]))
         families = {fam[bid] for bid in round1}
-        need = len(families) // 2 + 1 if len(families) > 1 else 1
+        need = {}                                                  # per answer: a majority of the OTHER families (the author's own family cannot vote on it)
+        for l in by_label:
+            others_n = len(families - {fam[author_of[l]]})
+            need[l] = others_n // 2 + 1 if others_n else None      # nobody independent left to vote: this answer can never clear the bar
         scored = {l: (len(v["VALIDATE"]), len(v["CHALLENGE"])) for l, v in votes.items()}
-        clear = [l for l, (v, c) in scored.items() if v >= need]
+        clear = [l for l, (v, c) in scored.items() if need[l] is not None and v >= need[l]]
         clean = [l for l in clear if scored[l][1] == 0]
         dirty = [l for l in clear if scored[l][1] > 0]
         winner, winners, dissent, outcome = None, [], [], "SPLIT"
@@ -127,7 +133,7 @@ class Council:
             winners = [winner]
             outcome, dissent = "CONSENSUS_WITH_DISSENT", notes[winner]
         rev = {v: k for k, v in label_of.items()}
-        self._rec("COUNCIL_RESULT", {"prompt_sha256": ph, "outcome": outcome, "answered": len(round1), "families": len(families), "need": need, "winner_brain": rev[winner] if winner else None,
+        self._rec("COUNCIL_RESULT", {"prompt_sha256": ph, "outcome": outcome, "answered": len(round1), "families": len(families), "need_by_brain": {rev[l]: n for l, n in need.items()}, "winner_brain": rev[winner] if winner else None,
                                      "answer_sha256": {rev[l]: _h(t) for l, t in by_label.items()}, "validate": {rev[l]: s[0] for l, s in scored.items()}, "challenge": {rev[l]: s[1] for l, s in scored.items()},
                                      "dissent_sha256": dissent})
         return {"outcome": outcome, "winner": rev[winner] if winner else None, "winner_text": by_label[winner] if winner else None, "winners": sorted(rev[l] for l in winners),
